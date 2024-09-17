@@ -64,10 +64,11 @@ class TradutorScreen extends StatefulWidget {
 
 class _TradutorScreenState extends State<TradutorScreen> {
   TextEditingController _textController = TextEditingController();
-  String _selectedLetter = 'A';
   List<Palavra> _todasPalavras = [];
   List<Palavra> _palavrasFiltradas = [];
   Map<int, String> _maoImages = {};
+  String? _selectedLetter;
+  Palavra? _palavraSelecionada;
 
   @override
   void initState() {
@@ -104,25 +105,22 @@ class _TradutorScreenState extends State<TradutorScreen> {
       List<dynamic> palavrasData = json.decode(jsonString);
       _todasPalavras =
           palavrasData.map((json) => Palavra.fromJson(json)).toList();
-      _filtrarPalavras(_selectedLetter);
     } catch (e) {
       print('Erro ao carregar palavras: $e');
     }
   }
 
-  void _filtrarPalavras(String filtro) {
+  void _filtrarPalavras(String letra) {
     setState(() {
-      if (filtro.length == 1) {
-        _selectedLetter = filtro.toUpperCase();
-        _palavrasFiltradas = _todasPalavras
-            .where((palavra) => palavra.letra == _selectedLetter)
-            .toList();
+      if (_selectedLetter == letra) {
+        _selectedLetter = null;
+        _palavrasFiltradas = [];
       } else {
-        _palavrasFiltradas = _todasPalavras
-            .where((palavra) =>
-                palavra.palavra.toLowerCase().contains(filtro.toLowerCase()))
-            .toList();
+        _selectedLetter = letra;
+        _palavrasFiltradas =
+            _todasPalavras.where((palavra) => palavra.letra == letra).toList();
       }
+      _palavraSelecionada = null;
     });
   }
 
@@ -138,97 +136,40 @@ class _TradutorScreenState extends State<TradutorScreen> {
     return 'https://www.ines.gov.br/dicionario-de-libras/public/media/palavras/videos/$videoParam';
   }
 
-  Future<void> _preloadImage(String imageUrl) async {
-    try {
-      await precacheImage(NetworkImage(imageUrl), context);
-    } catch (e) {
-      print('Erro ao pré-carregar imagem: $e');
+  void _buscarPalavra() {
+    String texto = _textController.text.trim();
+    if (texto.isEmpty) {
+      _mostrarMensagem('Por favor, digite uma palavra.');
+      return;
+    }
+
+    Palavra? palavraEncontrada = _todasPalavras.firstWhere(
+      (palavra) => palavra.palavra.toLowerCase() == texto.toLowerCase(),
+      orElse: () => Palavra(
+        ident: -1,
+        id: -1,
+        letra: '',
+        palavra: '',
+        descricao: '',
+        libras: '',
+        exemplo: '',
+        video: '',
+        mao: -1,
+      ),
+    );
+
+    if (palavraEncontrada.ident != -1) {
+      setState(() {
+        _palavraSelecionada = palavraEncontrada;
+      });
+    } else {
+      _mostrarMensagem('Palavra não encontrada no dicionário.');
     }
   }
 
-  void _mostrarDetalhesPalavra(Palavra palavra) async {
-    String imageUrl = _getImageUrl(palavra.mao);
-    String videoUrl = _getVideoUrl(palavra.video);
-
-    await _preloadImage(imageUrl);
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: Container(
-            width: double.minPositive,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      palavra.palavra,
-                      style:
-                          TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  Container(
-                    height: 200,
-                    child: Center(
-                      child: Image.network(
-                        imageUrl,
-                        loadingBuilder: (BuildContext context, Widget child,
-                            ImageChunkEvent? loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                  : null,
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          print('Erro ao carregar imagem: $error');
-                          print('URL da imagem: $imageUrl');
-                          print('Stack trace: $stackTrace');
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.error, color: Colors.red),
-                              Text('Não foi possível carregar a imagem',
-                                  style: TextStyle(color: Colors.red)),
-                              Text('Erro: $error',
-                                  style: TextStyle(
-                                      color: Colors.red, fontSize: 10)),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Descrição: ${palavra.descricao}'),
-                        SizedBox(height: 8),
-                        Text('Exemplo: ${palavra.exemplo}'),
-                        SizedBox(height: 8),
-                        if (palavra.video.isNotEmpty)
-                          VideoPlayerWidget(videoUrl: videoUrl)
-                        else
-                          Text('Nenhum vídeo disponível para esta palavra.'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+  void _mostrarMensagem(String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensagem)),
     );
   }
 
@@ -240,68 +181,156 @@ class _TradutorScreenState extends State<TradutorScreen> {
       ),
       body: Row(
         children: [
+          // Letras na lateral
           Container(
             width: 50,
-            color: Colors.grey[800],
             child: ListView(
-              children: [
-                for (var letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''))
-                  GestureDetector(
-                    onTap: () {
-                      _textController.text = letter;
-                      _filtrarPalavras(letter);
-                    },
-                    child: Container(
-                      padding: EdgeInsets.all(8),
-                      color:
-                          _selectedLetter == letter ? Colors.blue[700] : null,
-                      child: Text(
-                        letter,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: _selectedLetter == letter
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+              children: List.generate(26, (index) {
+                String letter = String.fromCharCode(65 + index);
+                return ListTile(
+                  title: Text(letter),
+                  onTap: () => _filtrarPalavras(letter),
+                  tileColor: _selectedLetter == letter
+                      ? Colors.blue.withOpacity(0.3)
+                      : null,
+                );
+              }),
             ),
           ),
+          // Conteúdo principal
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 20),
-                  TextField(
+            child: Column(
+              children: [
+                // Input no topo
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: TextField(
                     controller: _textController,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(),
-                      labelText: 'Digite o texto',
+                      labelText: 'Digite uma palavra',
                     ),
-                    onChanged: _filtrarPalavras,
                   ),
-                  SizedBox(height: 20),
-                  Expanded(
-                    child: _palavrasFiltradas.isEmpty
-                        ? Center(child: Text('Nenhuma palavra encontrada'))
-                        : ListView.builder(
-                            itemCount: _palavrasFiltradas.length,
-                            itemBuilder: (context, index) {
-                              var palavra = _palavrasFiltradas[index];
-                              return ListTile(
-                                title: Text(palavra.palavra),
-                                onTap: () => _mostrarDetalhesPalavra(palavra),
-                              );
-                            },
-                          ),
+                ),
+                // Botão Traduzir
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: ElevatedButton(
+                    onPressed: _buscarPalavra,
+                    child: Container(
+                      width: double.infinity,
+                      height: 50,
+                      alignment: Alignment.center,
+                      child: Text('Traduzir', style: TextStyle(fontSize: 18)),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF4B0082), // Cor roxa escura
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
-                ],
-              ),
+                ),
+                // Ícone Libras ou área de exibição
+                Expanded(
+                  child: _selectedLetter == null && _palavraSelecionada == null
+                      ? Column(
+                          children: [
+                            SizedBox(height: 20), // Espaçamento acima do ícone
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                border:
+                                    Border.all(color: Colors.grey, width: 2),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: Image.asset(
+                                  'assets/libras_icon.png',
+                                  height: 160,
+                                  width: 260,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : _palavraSelecionada != null
+                          ? SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Text(
+                                      _palavraSelecionada!.palavra,
+                                      style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Container(
+                                    height: 200,
+                                    child: Image.network(
+                                      _getImageUrl(_palavraSelecionada!.mao),
+                                      loadingBuilder: (BuildContext context,
+                                          Widget child,
+                                          ImageChunkEvent? loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return Center(
+                                            child: CircularProgressIndicator());
+                                      },
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        print(
+                                            'Erro ao carregar imagem: $error');
+                                        return Icon(Icons.error);
+                                      },
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                            'Descrição: ${_palavraSelecionada!.descricao}'),
+                                        SizedBox(height: 8),
+                                        Text(
+                                            'Exemplo: ${_palavraSelecionada!.exemplo}'),
+                                        SizedBox(height: 8),
+                                        if (_palavraSelecionada!
+                                            .video.isNotEmpty)
+                                          VideoPlayerWidget(
+                                              videoUrl: _getVideoUrl(
+                                                  _palavraSelecionada!.video))
+                                        else
+                                          Text(
+                                              'Nenhum vídeo disponível para esta palavra.'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _palavrasFiltradas.length,
+                              itemBuilder: (context, index) {
+                                return ListTile(
+                                  title:
+                                      Text(_palavrasFiltradas[index].palavra),
+                                  onTap: () {
+                                    setState(() {
+                                      _palavraSelecionada =
+                                          _palavrasFiltradas[index];
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
             ),
           ),
         ],
@@ -328,7 +357,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     super.initState();
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
     _initializeVideoPlayerFuture = _controller.initialize();
-    _controller.setLooping(true);
   }
 
   @override
@@ -341,33 +369,49 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        SizedBox(height: 20), // Espaçamento adicionado acima do vídeo
         FutureBuilder(
           future: _initializeVideoPlayerFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.done) {
-              return AspectRatio(
-                aspectRatio: _controller.value.aspectRatio,
-                child: VideoPlayer(_controller),
+              return Center(
+                child: Container(
+                  width: 250, // Largura fixa do vídeo
+                  height: 150, // Altura fixa do vídeo
+                  child: AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio,
+                    child: VideoPlayer(_controller),
+                  ),
+                ),
               );
+            } else if (snapshot.hasError) {
+              return Text('Erro ao carregar o vídeo: ${snapshot.error}');
             } else {
               return const Center(
-                child: CircularProgressIndicator(),
+                child: SizedBox(
+                  width: 250,
+                  height: 150,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
               );
             }
           },
         ),
-        ElevatedButton(
-          onPressed: () {
-            setState(() {
-              if (_controller.value.isPlaying) {
-                _controller.pause();
-              } else {
-                _controller.play();
-              }
-            });
-          },
-          child: Icon(
-            _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+        SizedBox(height: 10),
+        Center(
+          child: ElevatedButton(
+            onPressed: () {
+              setState(() {
+                if (_controller.value.isPlaying) {
+                  _controller.pause();
+                } else {
+                  _controller.play();
+                }
+              });
+            },
+            child: Icon(
+              _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+            ),
           ),
         ),
       ],

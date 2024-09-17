@@ -35,7 +35,7 @@
 
 1. Execute `flutter pub get` para instalar as dependências.
 2. Execute `flutter run` para iniciar o aplicativo em um emulador ou dispositivo conectado.
-3. Para rodar o app em modo web, execute `flutter run -d chrome --web-browser-flag "--disable-web-security"`
+3. Para rodar o app em modo web, execute `flutter run -d edge --web-browser-flag "--disable-web-security"`
 
 ## Screenshots
 

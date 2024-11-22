@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'dart:convert';
 import 'package:video_player/video_player.dart';
-import 'dart:async';
 
 void main() {
   runApp(MyApp());
@@ -25,7 +24,6 @@ class Palavra {
   final String letra;
   final String palavra;
   final String descricao;
-  final String libras;
   final String exemplo;
   final String video;
   final int mao;
@@ -36,7 +34,6 @@ class Palavra {
     required this.letra,
     required this.palavra,
     required this.descricao,
-    required this.libras,
     required this.exemplo,
     required this.video,
     required this.mao,
@@ -49,7 +46,6 @@ class Palavra {
       letra: json['letra']?.toString().toUpperCase() ?? '',
       palavra: json['palavra'],
       descricao: json['descricao'],
-      libras: json['libras'],
       exemplo: json['exemplo'],
       video: json['video'],
       mao: json['mao'] is String ? int.parse(json['mao']) : json['mao'],
@@ -151,7 +147,6 @@ class _TradutorScreenState extends State<TradutorScreen> {
         letra: '',
         palavra: '',
         descricao: '',
-        libras: '',
         exemplo: '',
         video: '',
         mao: -1,
@@ -162,6 +157,7 @@ class _TradutorScreenState extends State<TradutorScreen> {
       setState(() {
         _palavraSelecionada = palavraEncontrada;
       });
+       _textController.clear();
     } else {
       _mostrarMensagem('Palavra não encontrada no dicionário.');
     }
@@ -231,7 +227,7 @@ class _TradutorScreenState extends State<TradutorScreen> {
                     ),
                   ),
                 ),
-                // Ícone Libras ou área de exibição
+                // Exibição da palavra e vídeo
                 Expanded(
                   child: _selectedLetter == null && _palavraSelecionada == null
                       ? Column(
@@ -300,14 +296,14 @@ class _TradutorScreenState extends State<TradutorScreen> {
                                         Text(
                                             'Exemplo: ${_palavraSelecionada!.exemplo}'),
                                         SizedBox(height: 8),
-                                        if (_palavraSelecionada!
-                                            .video.isNotEmpty)
-                                          VideoPlayerWidget(
-                                              videoUrl: _getVideoUrl(
-                                                  _palavraSelecionada!.video))
-                                        else
-                                          Text(
-                                              'Nenhum vídeo disponível para esta palavra.'),
+                                        _palavraSelecionada!.video.isNotEmpty
+                                            ? VideoPlayerWidget(
+                                                videoUrl: _getVideoUrl(
+                                                    _palavraSelecionada!
+                                                        .video),
+                                              )
+                                            : Text(
+                                                'Nenhum vídeo disponível para esta palavra.'),
                                       ],
                                     ),
                                   ),
@@ -355,7 +351,19 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    _initializeController();
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoPlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _initializeController();
+    }
+  }
+
+  void _initializeController() {
+    _controller = VideoPlayerController.network(widget.videoUrl);
     _initializeVideoPlayerFuture = _controller.initialize();
   }
 
@@ -369,15 +377,15 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SizedBox(height: 20), // Espaçamento adicionado acima do vídeo
+        SizedBox(height: 20),
         FutureBuilder(
           future: _initializeVideoPlayerFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.done) {
               return Center(
                 child: Container(
-                  width: 250, // Largura fixa do vídeo
-                  height: 150, // Altura fixa do vídeo
+                  width: 250,
+                  height: 150,
                   child: AspectRatio(
                     aspectRatio: _controller.value.aspectRatio,
                     child: VideoPlayer(_controller),
@@ -387,7 +395,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             } else if (snapshot.hasError) {
               return Text('Erro ao carregar o vídeo: ${snapshot.error}');
             } else {
-              return const Center(
+              return Center(
                 child: SizedBox(
                   width: 250,
                   height: 150,
@@ -398,20 +406,18 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           },
         ),
         SizedBox(height: 10),
-        Center(
-          child: ElevatedButton(
-            onPressed: () {
-              setState(() {
-                if (_controller.value.isPlaying) {
-                  _controller.pause();
-                } else {
-                  _controller.play();
-                }
-              });
-            },
-            child: Icon(
-              _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-            ),
+        ElevatedButton(
+          onPressed: () {
+            setState(() {
+              if (_controller.value.isPlaying) {
+                _controller.pause();
+              } else {
+                _controller.play();
+              }
+            });
+          },
+          child: Icon(
+            _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
           ),
         ),
       ],
